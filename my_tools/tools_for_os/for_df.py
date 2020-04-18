@@ -4,9 +4,15 @@
 # @Function :
 
 import pandas as pd
+import pymysql
 
 
-def df_set_and_count(df, feature_name):
-    value_count = pd.DataFrame({'value': list(df[feature_name].value_counts().index),
-                               'count': df[feature_name].value_counts().tolist()})
-    return value_count
+def get_df_from_sql(sql):
+    # Connect to the MySQL database
+    db = pymysql.connect(host='localhost',
+                         port=3306,
+                         user='root',
+                         passwd='root',
+                         db='originaldata')
+    df = pd.read_sql(sql = sql, con = db)
+    return df
