@@ -9,16 +9,16 @@ import datetime
 
 import pandas as pd
 from utils.logger import logger
-from utils.funcs import get_df_from_sql
+from utils.funcs import read_df_from_sql
+from utils.db_conf import WAITING_TIME_CONF
 
 from utils.config import PROCESSED_DATA_DIR
 
 
 def get_appt_info():
-    logger.info('Get information about appointment')
-    logger
-    sql_appointment = """SELECT * FROM appointment"""
-    data_appointment = get_df_from_sql(sql_appointment)
+    logger.info('Get information about appointment!')
+    logger.debug('Get table of appointment!')
+    data_appointment = read_df_from_sql('SELECT * FROM appointment').drop(columns=['LastUpdated'])
     data_appointment = data_appointment[
         ((data_appointment.AliasSerNum == 31)
          | (data_appointment.AliasSerNum == 23))
@@ -28,99 +28,62 @@ def get_appt_info():
         & ((data_appointment.Status == 'Completed')
            | (data_appointment.Status == 'Pt. CompltFinish'))
         & (data_appointment.State == 'Active')]
-    print(f'The shape of data_appointment {data_appointment.shape}')
 
-    print(f'\nThe shape of data_appointment {data_appointment.shape}')
-    sql_pt = """SELECT * FROM patient"""
-    data_pt = get_df_from_sql(sql_pt)
-    print(f'The shape of data_pt {data_pt.shape}')
-    sql_ptc = """SELECT * FROM patientcopy"""
-    data_ptc = get_df_from_sql(sql_ptc)
-    print(f'The shape of data_ptc {data_ptc.shape}')
-    sql_pd = """SELECT * FROM patientdoctor"""
-    data_pd = get_df_from_sql(sql_pd)
-    print(f'The shape of data_pd {data_pd.shape}')
-    sql_dx = """SELECT * FROM diagnosis"""
-    data_dx = get_df_from_sql(sql_dx)
-    print(f'The shape of data_dx {data_dx.shape}')
-    sql_dxt = """SELECT * FROM diagnosistranslation"""
-    data_dxt = get_df_from_sql(sql_dxt)
-    print(f'The shape of data_dxt {data_dxt.shape}')
-    sql_co = """SELECT * FROM course"""
-    data_co = get_df_from_sql(sql_co)
-    print(f'The shape of data_co {data_co.shape}')
-    sql_pl = """SELECT * FROM plan"""
-    data_pl = get_df_from_sql(sql_pl)
-    print(f'The shape of data_pl {data_pl.shape}')
+    logger.debug('Get table of patient!')
+    data_pt = read_df_from_sql('SELECT * FROM patient').drop(columns=['LastUpdated'])
+    data_ptc = read_df_from_sql('SELECT * FROM patientcopy').drop(columns=['LastUpdated'])
 
-    try:
-        print('Drop columns')
-        data_appointment.drop(columns=['LastUpdated'], inplace=True)
-        data_pt.drop('LastUpdated', axis=1, inplace=True)
-        data_ptc.drop('LastUpdated', axis=1, inplace=True)
-        data_pd.drop('LastUpdated', axis=1, inplace=True)
-        data_dx.drop('LastUpdated', axis=1, inplace=True)
-        data_dxt.drop('LastUpdated', axis=1, inplace=True)
-        data_co.drop('LastUpdated', axis=1, inplace=True)
-        data_pl.drop('LastUpdated', axis=1, inplace=True)
-        data_re_appt.drop('LastUpdated', axis=1, inplace=True)
-    except:
-        print('Finish droppping columns')
-
-    print('\nFinish getting data')
-
-    print('=' * 20)
-    print(f'Start merging data')
-
-    # 筛选appointment 中的数据
-    print('\nProcess data_appointment')
-    print(f'\nThe shape of data_appointment {data_appointment.shape}')
-
-
-    # 拼接data_pt 和data_appointment
-    print(f'\nMerge data_pt and data_appointment')
-    pt_appt = pd.merge(data_appointment, data_pt, on='PatientSerNum', how='inner')
-    print(f'pt_appt shape is {pt_appt.shape}')
-    del data_appointment, data_pt
+    logger.debug('Merge appointment and patient!')
+    merge_data = pd.merge(data_appointment, data_pt, on='PatientSerNum', how='inner')
+    merge_data = pd.merge(merge_data, data_ptc, on='PatientSerNum', how='inner')
+    del data_appointment, data_pt, data_ptc
     gc.collect()
 
-    print(f'\nMerge data_ptc')
-    pt_appt = pd.merge(pt_appt, data_ptc, on='PatientSerNum', how='inner')
-    print(f'pt_appt shape is {pt_appt.shape}')
-    del data_ptc
+    logger.debug('Get table of patientdoctor!')
+    data_pd = read_df_from_sql('SELECT * FROM patientdoctor').drop(columns=['LastUpdated'])
+    data_pd = data_pd[(data_pd.OncologistFlag == 1) & (data_pd.PrimaryFlag == 1)]
+
+    logger.debug('Merge patientdoctor!')
+    # data_pd, data_appt AliasSerNum 不同，data_appt_ 中只保留了23、31，data_pd_ 中只有37
+    data_pd = data_pd.drop(columns=['AliasSerNum'])
+    merge_data = pd.merge(merge_data, data_pd, on='PatientSerNum', how='left')
+
+    logger.debug('Get table of diagnosis!')
+    data_dx = read_df_from_sql('SELECT * FROM diagnosis').drop(columns=['LastUpdated'])
+    logger.debug('Get table of diagnosis!')
+    data_dxt = read_df_from_sql('SELECT * FROM diagnosistranslation').drop(columns=['LastUpdated'])
+
+    logger.debug('Merge diagnosis and diagnosistranslation!')
+    data_dxt = data_dxt.rename(columns={'AliasName': 'dxt_AliasName'})
+    dx_dxt = pd.merge(data_dx, data_dxt, on='DiagnosisCode', how='left')
+    del data_dx, data_dxt
     gc.collect()
 
-    # PatientDoctor 的预处理
-    print('\nProcess data_pd')
-    data_pd = data_pd[(data_pd.OncologistFlag == 1) &
-                      (data_pd.PrimaryFlag == 1)]
-    print(f'The shape of data_pd {data_pd.shape}')
+    dx_dxt = dx_dxt.drop(columns=['AliasSerNum'])
+    dx_dxt = dx_dxt.drop(columns=['PatientSerNum'])
+    merge_data = pd.merge(merge_data, dx_dxt, on=['DiagnosisSerNum'], how='inner')
+
+    logger.debug('Get table of course!')
+    data_co = read_df_from_sql('SELECT * FROM course')
+
+    logger.debug('Get table of plan!')
+    data_pl = read_df_from_sql('SELECT * FROM plan')
+
+
 
     # 拼接pt_appt data_pd
     print(f'\nMerge data_pd_ and pt_appt')
-    # data_pd_, data_appt AliasSerNum 不同，data_appt_ 中只保留了23、31，data_pd_ 中只有37
-    data_pd.drop('AliasSerNum', axis=1, inplace=True)
-    pt_pd_appt = pd.merge(pt_appt, data_pd, on='PatientSerNum', how='left')
+
     print(f'\npt_pd_appt shape is {pt_pd_appt.shape}')
     del pt_appt, data_pd
     gc.collect()
 
-    # 拼接data_dxt 和data_dx
-    print(f'\nMerge data_dxt and data_dx')
-    data_dxt = data_dxt.rename(columns={'AliasName': 'dxt_AliasName'}, inplace=False)
-    dx_dxt = pd.merge(data_dx, data_dxt, on='DiagnosisCode', how='left')
-    print(f'dx_dxt shape is {dx_dxt.shape}')
-    del data_dx, data_dxt
-    gc.collect()
+
 
     # 拼接pt_pd_appt 和dx_dxt
     print(f'\nMerge pt_pd_appt and dx_dxt')
-    dx_dxt.drop('AliasSerNum', axis=1, inplace=True)
-    dx_dxt.drop('PatientSerNum', axis=1, inplace=True)
-    pt_pd_appt_dx_dxt = pd.merge(pt_pd_appt, dx_dxt, on=['DiagnosisSerNum'], how='inner')
-    print(f'pt_pd_appt_dx_dxt shape is {pt_pd_appt_dx_dxt.shape}')
-    del pt_pd_appt, dx_dxt
-    gc.collect()
+
+
 
     # Plan 的预处理
     print('\nProcess data_pl')
@@ -310,6 +273,4 @@ def gettreat_info():
 
 
 if __name__ == '__main__':
-
-    pass
-
+    data = read_df_from_sql("""SELECT * FROM appointment""", WAITING_TIME_CONF)

@@ -5,8 +5,9 @@
 
 import os
 import pymysql
-
 import pandas as pd
+
+from utils.db_conf import WAITING_TIME_CONF
 
 
 def create_folder(folder_name):
@@ -14,12 +15,8 @@ def create_folder(folder_name):
         os.makedirs(folder_name)
 
 
-def get_df_from_sql(sql):
-    # Connect to the MySQL database
-    db = pymysql.connect(host='localhost',
-                         port=3306,
-                         user='root',
-                         passwd='root',
-                         db='originaldata')
-    df = pd.read_sql(sql = sql, con = db)
+def read_df_from_sql(sql, db_config=WAITING_TIME_CONF):
+    con = pymysql.connect(**db_config)
+    df = pd.read_sql(sql=sql, con=con)
+    con.close()
     return df
