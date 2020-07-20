@@ -20,3 +20,11 @@ def read_df_from_sql(sql, db_config=WAITING_TIME_CONF):
     df = pd.read_sql(sql=sql, con=con)
     con.close()
     return df
+
+
+def drop_cols_with_same_values(df):
+    for col in df.columns:
+        if len(df[col].unique()) == 1:
+            df = df.drop(col, axis=1)
+    return df
+
