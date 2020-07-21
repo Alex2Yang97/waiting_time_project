@@ -142,14 +142,14 @@ def get_treat_info():
         & (data_radiation.MU > 0)
         & (data_radiation.MUCoeff > 0)]
 
-    logger.debug('Get table of radiation!')
+    logger.debug('Get table of radiationhstry!')
     data_radiationhstry = read_df_from_sql('SELECT * FROM radiationhstry').drop(columns=['LastUpdated'])
     data_radiationhstry = data_radiationhstry[
         data_radiationhstry.TreatmentStartTime > pd.Timestamp('2015-01-01 00:00:00')]
 
-    logger.debug('Merge radiation and radiation!')
+    logger.debug('Merge radiation and radiationhstry!')
     merged_data = pd.merge(data_radiation, data_radiationhstry,
-                     on=['RadiationSerNum', 'AliasSerNum'], how='inner')
+                           on=['RadiationSerNum', 'AliasSerNum'], how='inner')
     del data_radiation, data_radiationhstry
     gc.collect
 

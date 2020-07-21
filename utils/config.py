@@ -13,11 +13,12 @@ LOG_LEVEL = 'DEBUG'
 __proj_dir = os.path.dirname(os.path.dirname(__file__))
 __data_dir = os.path.join(__proj_dir, 'data')
 
-PROCESSED_DATA_DIR = os.path.join(__data_dir, 'processed_data')
 
-DATA_DIR = os.path.join(__proj_dir, 'data')
+MODEL_DIR = os.path.join(__data_dir, 'model')
+RES_DIR = os.path.join(__data_dir, 'result')
+FIG_DIR = os.path.join(__data_dir, 'figure')
 
 
 if __name__ == '__main__':
     print(__proj_dir)
-    print(DATA_DIR)
+    print(__data_dir)

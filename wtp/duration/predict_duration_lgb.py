@@ -11,12 +11,17 @@ import lightgbm as lgb
 from sklearn import preprocessing
 
 from utils.logger import logger
+from utils.funcs import save_to_pkl, mae, mape
+
+from data_process import get_apptointment_info, get_treat_info
+
+from wtp.duration.config_duration import DT_MODEL_DIR, DT_FIG_DIR, DT_RES_DIR
 
 
 FEATURE_NUM = ['Scheduled_duration', 'Actual_duration',
                'age',
-               'TreatmentTime_total', 'ImagesTaken_total',
-               'MU_total', 'MUCoeff_total']
+               'TreatmentTime', 'ImagesTaken',
+               'MU', 'MUCoeff']
 
 # RadiationId
 FEATURE_CATE = ['dxt_AliasName', 'AliasSerNum',
@@ -76,23 +81,23 @@ def select_feature(processed_appt_data, processed_treat_data):
     return data_display, data, origin_data
 
 
-# def train_lgb():
-#
-#     label = data[['Actual_duration']]
-#     data.drop(['Actual_duration'], axis=1, inplace=True)
-#
-#     train_x = data.iloc[: int(data.shape[0] * 0.9)]
-#     train_y = label.iloc[: int(data.shape[0] * 0.9)]
-#     print(f'\nThe number of train set is {train_x.shape[0]}')
-#
-#     test_x = data.iloc[int(data.shape[0] * 0.9):]
-#     test_y = label.iloc[int(data.shape[0] * 0.9):]
-#     print(f'The number of test set is {test_x.shape[0]}')
-#
-#     print('Finish getting')
+def data_split_by_date(data, ratio=0.9):
+    train_data = data.iloc[: int(data.shape[0] * ratio)]
+    train_data = train_data.reset_index(drop=True)
+    test_data = data.iloc[int(data.shape[0] * ratio):]
+    test_data = test_data.reset_index(drop=True)
+
+    return train_data, test_data
 
 
-def lgb_reg_train(train_x, train_y, val_x, val_y, model_args, train_args):
+def generate_xy(data, label='Actual_duration'):
+    y = data[[label]]
+    data_ = data.drop([label], axis=1)
+    return data_, y
+
+
+def lgb_reg_train(train_x, train_y, val_x, val_y, model_args=None, train_args=None):
+    logger.info('Start training!')
     default_model_args = {
         'num_leaves': 64, 'objective': 'mape', 'max_depth': -1,
         'learning_rate': 0.01, 'min_child_samples': 5, 'n_estimators': 100000,
@@ -111,5 +116,55 @@ def lgb_reg_train(train_x, train_y, val_x, val_y, model_args, train_args):
     lgb_model.fit(train_x, train_y,
                   eval_set=[(train_x, train_y), (val_x, val_y)],
                   **default_train_args)
-
     return lgb_model
+
+
+if __name__ == '__main__':
+    processed_appointment_data = get_apptointment_info()
+    logger.debug(f'process_appointment_data shap {processed_appointment_data.shape}')
+    processed_treatment_data = get_treat_info()
+    logger.debug(f'process_treatment_data shap {processed_treatment_data.shape}')
+
+    data_display, data, origin_data = select_feature(processed_appointment_data, processed_treatment_data)
+
+    train_data, test_data = data_split_by_date(data)
+    train_data, val_data = data_split_by_date(train_data)
+    x_train, y_train = generate_xy(train_data)
+    x_val, y_val = generate_xy(val_data)
+    logger.info('Train model for LightGBM model with scheduled duration!')
+    # model_args = {'objective': 'rmse'}
+    model = lgb_reg_train(x_train, y_train, x_val, y_val)
+    save_to_pkl(model.booster_, f'lgb_mape.pkl', DT_MODEL_DIR)
+
+    no_doc_train_data = train_data.drop(columns=['Scheduled_duration']).copy()
+    no_doc_val_data = val_data.drop(columns=['Scheduled_duration']).copy()
+    no_doc_test_data = test_data.drop(columns=['Scheduled_duration']).copy()
+    no_doc_x_train, no_doc_y_train = generate_xy(no_doc_train_data)
+    no_doc_x_val, no_doc_y_val = generate_xy(no_doc_val_data)
+    logger.info('Train model for LightGBM model without scheduled duration!')
+    model = lgb_reg_train(no_doc_x_train, no_doc_y_train, no_doc_x_val, no_doc_y_val)
+    save_to_pkl(model.booster_, f'no_doc_lgb_mape.pkl', DT_MODEL_DIR)
+
+    logger.info('Testing for LightGBM model with scheduled duration!')
+    x_test, y_test = generate_xy(test_data)
+    y_pred_lgb = model.booster_.predict(x_test) # num_iteration=booster.best_iteration_
+    logger.debug(f'The Mean Absolute Error is {mae(y_test, y_pred_lgb)}!')
+    logger.debug(f'The Mean Absolute Percentage Error is {mape(y_test, y_pred_lgb)}!')
+
+    logger.info('Testing for LightGBM model without scheduled duration!')
+    no_doc_x_test, no_doc_y_test = generate_xy(no_doc_test_data)
+    no_doc_y_pred_lgb = model.booster_.predict(no_doc_x_test)  # num_iteration=booster.best_iteration_
+    logger.debug(f'The Mean Absolute Error is {mae(no_doc_y_test, no_doc_y_pred_lgb)}!')
+    logger.debug(f'The Mean Absolute Percentage Error is {mape(no_doc_y_test, no_doc_y_pred_lgb)}!')
+
+    # 人工基准
+    logger.info('Testing for Doctor experience!')
+    y_pred_doctor = x_test['Scheduled_duration'].tolist()
+    logger.debug(f'The Mean Absolute Error is {mae(y_test, y_pred_doctor)}!')
+    logger.debug(f'The Mean Absolute Percentage Error is {mape(y_test, y_pred_doctor)}!')
+
+
+
+
+
+
