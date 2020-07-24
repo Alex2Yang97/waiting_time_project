@@ -13,8 +13,8 @@ def get_df_from_sql(sql):
     db = pymysql.connect(host='localhost',
                          port=3306,
                          user='root',
-                         passwd='root',
-                         db='originaldata')
+                         passwd='980719',
+                         db='waiting_time_data')
     df = pd.read_sql(sql = sql, con = db)
     return df
 

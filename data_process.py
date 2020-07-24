@@ -10,9 +10,6 @@ import datetime
 import pandas as pd
 from utils.logger import logger
 from utils.funcs import read_df_from_sql, drop_cols_with_same_values
-from utils.db_conf import WAITING_TIME_CONF
-
-from utils.config import PROCESSED_DATA_DIR
 
 
 APPOINTMENT_FEATURE = [
