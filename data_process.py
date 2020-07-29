@@ -187,6 +187,25 @@ def get_treat_info():
     return processed_treat_data
 
 
+# 填补缺失值
+def fill_nan(data, columns, data_type):
+    # 因为需要进行onehot encoding，所以在拼接数据之前，先进行数据格式的处理
+    if data_type == 'number':
+        for col in columns:
+            try:
+                data[col].fillna(0, inplace=True)
+            except:
+                pass
+    else:
+        for col in columns:
+            try:
+                data[col].fillna('Unknown', inplace=True)
+                data[col] = data[col].astype(str)
+            except:
+                pass
+    return data
+
+
 if __name__ == '__main__':
     processed_appointment_data = get_apptointment_info()
     print(f'process_appointment_data shap {processed_appointment_data.shape}')
