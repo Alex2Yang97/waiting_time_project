@@ -125,6 +125,7 @@ def get_apptointment_info():
     processed_appt_data['Actual_duration'] = processed_appt_data.apply(
         lambda x: (x.ActualEndDate - x.ActualStartDate).seconds / 60, axis=1)
     processed_appt_data = processed_appt_data.sort_values(by=['PatientSerNum', 'AppointmentSerNum'])
+    processed_appt_data = processed_appt_data.drop_duplicates().reset_index(drop=True)
 
     return processed_appt_data
 
@@ -148,7 +149,7 @@ def get_treat_info():
     merged_data = pd.merge(data_radiation, data_radiationhstry,
                            on=['RadiationSerNum', 'AliasSerNum'], how='inner')
     del data_radiation, data_radiationhstry
-    gc.collect
+    gc.collect()
 
     logger.debug('Merge plan!')
     data_plan = read_df_from_sql('SELECT * FROM plan').drop(columns=['LastUpdated'])
@@ -183,27 +184,19 @@ def get_treat_info():
     processed_treat_data['Treatment_duration'] = processed_treat_data.apply(
         lambda x: (x.TreatmentEndTime - x.TreatmentStartTime).seconds, axis=1)
     processed_treat_data = processed_treat_data.sort_values(by=['PatientSerNum', 'RadiationHstryAriaSer'])
+    processed_treat_data = processed_treat_data.drop_duplicates().reset_index(drop=True)
 
     return processed_treat_data
 
 
-# 填补缺失值
-def fill_nan(data, columns, data_type):
-    # 因为需要进行onehot encoding，所以在拼接数据之前，先进行数据格式的处理
-    if data_type == 'number':
-        for col in columns:
-            try:
-                data[col].fillna(0, inplace=True)
-            except:
-                pass
+# 因为部分特征有多个取值，因此对于这样的数据，如果在DataFrame 中变成一个list
+# 一个取值的，还是值，而不是list
+def get_list(x):
+    x = list(x)
+    if len(x) == 1:
+        return x[0]
     else:
-        for col in columns:
-            try:
-                data[col].fillna('Unknown', inplace=True)
-                data[col] = data[col].astype(str)
-            except:
-                pass
-    return data
+        return x
 
 
 if __name__ == '__main__':
