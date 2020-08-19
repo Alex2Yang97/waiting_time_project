@@ -207,12 +207,7 @@ def generate_sample(room_sample_all, one_hot_dict):
     return train_x, train_y
 
 
-def split_train_test(x, y, seed=1):
-    random.seed(seed)
-    random.shuffle(x)
-    random.seed(seed)
-    random.shuffle(y)
-
+def split_train_test(x, y):
     samples_length = len(y)
     train_x = x_samples[: int(samples_length * 0.9)]
     train_y = y_labels[: int(samples_length * 0.9)]
