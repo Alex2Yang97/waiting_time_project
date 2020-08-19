@@ -36,6 +36,15 @@ def drop_cols_with_same_values(df):
     return df
 
 
+# 计算时间差
+def cal_time_inv(before, now):
+    if now >= before:
+        inv = (now - before).seconds
+        return inv
+    else:
+        return 0
+
+
 def rmse(y_true, y_pred):
     if y_true.shape != y_pred.shape:
         raise ValueError(

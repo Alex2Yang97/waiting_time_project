@@ -7,50 +7,29 @@
 
 
 import os
-import datetime
 import random
 
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 
-from sklearn import preprocessing
-from sklearn.utils import shuffle
 from sklearn.impute import SimpleImputer
 
 import tensorflow as tf
-from tensorflow.keras import backend as K
 from tensorflow.keras import layers, optimizers
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.utils import plot_model
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 from utils.logger import logger
-from data_process import get_apptointment_info, get_treat_info, fill_nan, get_list
-# from wtp.duration.predict_lgb_model import FEATURE_NUM, FEATURE_CATE
+from data_process import get_apptointment_info, get_treat_info
+from wtp.duration.predict_lgb_model import NUM_FEATURES, CATE_FEATURES
 from wtp.duration.config_duration import DT_MODEL_DIR
-
-
-FEATURE_NUM = ['Scheduled_duration', 'Actual_duration',
-               'age',
-               'TreatmentTime', 'ImagesTaken',
-               'MU', 'MUCoeff']
-
-
-FEATURE_CATE = ['dxt_AliasName', 'AliasSerNum',
-                'Sex',
-                'month', 'week', 'hour',
-                'DoctorSerNum',
-                'TreatmentOrientation',
-                'UserName',
-                'CourseId',
-                'ResourceSerNum']# FractionNumber
 
 
 def one_hot_encoding(processed_data):
     cate_onehot_data = pd.DataFrame({})
     update_cate_features = []
-    for feature in FEATURE_CATE:
+    for feature in CATE_FEATURES:
         tmp = pd.get_dummies(processed_data[[feature]], prefix=f"{feature}_")
         update_cate_features.extend(tmp.columns)
         cate_onehot_data = pd.concat([cate_onehot_data, tmp], axis=1)
@@ -62,8 +41,8 @@ def one_hot_encoding(processed_data):
 
 def fill_num(processed_data):
     imp_mean = SimpleImputer(missing_values=np.nan, strategy='mean')
-    imp_mean.fit(processed_data[FEATURE_NUM])
-    processed_data.loc[:, FEATURE_NUM] = imp_mean.transform(processed_data[FEATURE_NUM])
+    imp_mean.fit(processed_data[NUM_FEATURES])
+    processed_data.loc[:, NUM_FEATURES] = imp_mean.transform(processed_data[NUM_FEATURES])
     return processed_data
 
 
@@ -72,7 +51,7 @@ def split_feature_label(all_data, update_cate_features):
     train_samples_lst = []
     label_samples_lst = []
     for pat, sample in all_data.groupby('PatientSerNum'):
-        sample = sample[FEATURE_NUM + update_cate_features]
+        sample = sample[NUM_FEATURES + update_cate_features]
         label_samples_lst.append(sample.iloc[-1, 1])
         sample.iloc[-1, 1] = 0
         patients_lst.append(pat)

@@ -21,18 +21,12 @@ tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 from utils.logger import logger
 from data_process import get_apptointment_info, get_treat_info, get_list
-from wtp.duration.predict_lgb_model import FEATURE_NUM, FEATURE_CATE
+from wtp.duration.predict_lgb_model import NUM_FEATURES, CATE_FEATURES
 
 
 NN_NUM_FEATURES = ['Scheduled_duration', 'Actual_duration',
                    'age', 'TreatmentTime_total', 'ImagesTaken_total',
                    'MU_total', 'MUCoeff_total', 'Interval_scheduled']
-
-# RadiationId
-NN_CATE_FEATURES = ['dxt_AliasName', 'Sex', 'AliasSerNum',
-                    'month', 'week', 'hour', 'DoctorSerNum',
-                    'TreatmentOrientation', 'FractionNumber',
-                    'UserName', 'CourseId', 'ResourceSerNum']
 
 
 def combine_mul_row_appt(data_part1):
@@ -181,23 +175,28 @@ def one_hot_enc(feature, data):
 
 
 def process_sequence_data(processed_data_):
-    logger.debug('Process sequence data!')
+    logger.info('Process sequence data!')
     processed_data = processed_data_.copy()
-    imp_mean = SimpleImputer(missing_values=np.nan, strategy='mean')
-    imp_mean.fit(processed_data[FEATURE_NUM])
-    processed_data.loc[:, FEATURE_NUM] = imp_mean.transform(processed_data[FEATURE_NUM])
 
-    cate_features = processed_data[FEATURE_CATE].select_dtypes(include=['category', 'object']).columns
-    cate_features_number = [i for i in FEATURE_CATE if i not in cate_features]
+    imp_mean = SimpleImputer(missing_values=np.nan, strategy='mean')
+    imp_mean.fit(processed_data[NUM_FEATURES])
+    processed_data.loc[:, NUM_FEATURES] = imp_mean.transform(processed_data[NUM_FEATURES])
+
+    imp_mean = SimpleImputer(missing_values=np.nan, strategy='mean')
+    imp_mean.fit(processed_data[NUM_FEATURES])
+    processed_data.loc[:, NUM_FEATURES] = imp_mean.transform(processed_data[NUM_FEATURES])
+
+    cate_features = processed_data[CATE_FEATURES].select_dtypes(include=['category', 'object']).columns
+    cate_features_number = [i for i in CATE_FEATURES if i not in cate_features]
 
     processed_data.loc[:, cate_features] = processed_data.loc[:, cate_features].fillna('NULL').reset_index(drop=True)
     processed_data.loc[:, cate_features_number] = processed_data.loc[:, cate_features_number].fillna(0).reset_index(
         drop=True)
 
     for col in processed_data.columns:
-        if col in FEATURE_CATE:
+        if col in CATE_FEATURES:
             processed_data[col] = processed_data[col].astype('category').reset_index(drop=True)
-        if col in FEATURE_NUM:
+        if col in NUM_FEATURES:
             processed_data[col] = processed_data[col].astype('float').reset_index(drop=True)
 
     return processed_data
@@ -222,7 +221,7 @@ def filter_data(processed_data):
     series_data_grouped = series_data.groupby('PatientSerNum')
     pat_lst = shuffle(list(series_data_grouped.groups.keys()), random_state=1)
     logger.debug(f'The total number of patient is {len(pat_lst)}')
-    return pat_lst, series_data_grouped
+    return pat_lst, series_data_grouped, series_data
 
 
 def sequence_model():
@@ -258,13 +257,9 @@ def split_train_test(pat_lst, seed=1):
     return train_lst, val_lst, test_lst
 
 
-def generate_sample(train_sample_,
-                    label_encoder_dxt_AliasName, label_encoder_Sex, label_encoder_AliasSerNum,
-                    label_encoder_month, label_encoder_week, label_encoder_hour,
-                    label_encoder_DoctorSerNum, label_encoder_FractionNumber, label_encoder_UserName,
-                    label_encoder_CourseId, label_encoder_ResourceSerNum):
+def generate_sample(train_sample_, one_hot_dict):
 
-    train_sample = train_sample_.reset_index(drop=True)
+    train_sample = train_sample_.reset_index(drop=True).copy()
 
     # 样本标签
     train_y = np.array([train_sample.Actual_duration.iloc[-1]])
@@ -282,51 +277,63 @@ def generate_sample(train_sample_,
     encode_cate = pd.DataFrame({})
 
     # 这个地方将Sex 作为序列的一部分，并不是在最后的隐藏层进行合并
+    label_encoder_Sex = one_hot_dict['label_encoder_Sex']
     encode_cate['Sex'] = train_sample['Sex'].apply(
         lambda x: sum(label_encoder_Sex.transform(np.array(x).reshape(-1, 1))))
     train_x = np.vstack(encode_cate.Sex.tolist())
 
+    label_encoder_dxt_AliasName = one_hot_dict['label_encoder_dxt_AliasName']
     encode_cate['dxt_AliasName'] = train_sample['dxt_AliasName'].apply(
         lambda x: sum(label_encoder_dxt_AliasName.transform(np.array(x).reshape(-1, 1))))
     train_x = np.hstack((train_x, np.vstack(encode_cate.dxt_AliasName.tolist())))
 
+    label_encoder_AliasSerNum = one_hot_dict['label_encoder_AliasSerNum']
     train_sample['AliasSerNum'] = train_sample['AliasSerNum'].astype(str)
     encode_cate['AliasSerNum'] = train_sample['AliasSerNum'].apply(
         lambda x: sum(label_encoder_AliasSerNum.transform(np.array(x).reshape(-1, 1))))
     train_x = np.hstack((train_x, np.vstack(encode_cate.AliasSerNum.tolist())))
 
+    label_encoder_month = one_hot_dict['label_encoder_month']
     encode_cate['month'] = train_sample['month'].apply(
         lambda x: sum(label_encoder_month.transform(np.array(x).reshape(-1, 1))))
     train_x = np.hstack((train_x, np.vstack(encode_cate.month.tolist())))
 
+    label_encoder_week = one_hot_dict['label_encoder_week']
     encode_cate['week'] = train_sample['week'].apply(
         lambda x: sum(label_encoder_week.transform(np.array(x).reshape(-1, 1))))
     train_x = np.hstack((train_x, np.vstack(encode_cate.week.tolist())))
 
+    label_encoder_hour = one_hot_dict['label_encoder_hour']
     encode_cate['hour'] = train_sample['hour'].apply(
         lambda x: sum(label_encoder_hour.transform(np.array(x).reshape(-1, 1))))
     train_x = np.hstack((train_x, np.vstack(encode_cate.hour.tolist())))
 
+    label_encoder_DoctorSerNum = one_hot_dict['label_encoder_DoctorSerNum']
     encode_cate['DoctorSerNum'] = train_sample['DoctorSerNum'].apply(
         lambda x: sum(label_encoder_DoctorSerNum.transform(np.array(x).reshape(-1, 1))))
     train_x = np.hstack((train_x, np.vstack(encode_cate.DoctorSerNum.tolist())))
 
+    label_encoder_TreatmentOrientation = one_hot_dict['label_encoder_TreatmentOrientation']
     encode_cate['TreatmentOrientation'] = train_sample['TreatmentOrientation'].apply(
         lambda x: sum(label_encoder_TreatmentOrientation.transform(np.array(x).reshape(-1, 1))))
     train_x = np.hstack((train_x, np.vstack(encode_cate.TreatmentOrientation.tolist())))
 
+    label_encoder_FractionNumber = one_hot_dict['label_encoder_FractionNumber']
     encode_cate['FractionNumber'] = train_sample['FractionNumber'].apply(
         lambda x: sum(label_encoder_FractionNumber.transform(np.array(x).reshape(-1, 1))))
     train_x = np.hstack((train_x, np.vstack(encode_cate.FractionNumber.tolist())))
 
+    label_encoder_UserName = one_hot_dict['label_encoder_UserName']
     encode_cate['UserName'] = train_sample['UserName'].apply(
         lambda x: sum(label_encoder_UserName.transform(np.array(x).reshape(-1, 1))))
     train_x = np.hstack((train_x, np.vstack(encode_cate.UserName.tolist())))
 
+    label_encoder_CourseId = one_hot_dict['label_encoder_CourseId']
     encode_cate['CourseId'] = train_sample['CourseId'].apply(
         lambda x: sum(label_encoder_CourseId.transform(np.array(x).reshape(-1, 1))))
     train_x = np.hstack((train_x, np.vstack(encode_cate.CourseId.tolist())))
 
+    label_encoder_ResourceSerNum = one_hot_dict['label_encoder_ResourceSerNum']
     encode_cate['ResourceSerNum'] = train_sample['ResourceSerNum'].apply(
         lambda x: sum(label_encoder_ResourceSerNum.transform(np.array(x).reshape(-1, 1))))
     train_x = np.hstack((train_x, np.vstack(encode_cate.ResourceSerNum.tolist())))
@@ -339,7 +346,7 @@ def generate_sample(train_sample_,
     return train_x, train_y
 
 
-def train_and_test(train_lst, val_lst, test_lst, seed, model_name):
+def train_and_test(train_lst, val_lst, test_lst, one_hot_dict, seed, model_name):
     logger.debug('Start training model!')
     model_sequence = sequence_model()
     opt = optimizers.Adam(lr=0.001)
@@ -359,7 +366,7 @@ def train_and_test(train_lst, val_lst, test_lst, seed, model_name):
     for i in range(len(train_lst)):
         pat = train_lst[i]
         train_sample = series_data_grouped.get_group(pat)
-        train_x_i, train_y_i = generate_sample(train_sample)
+        train_x_i, train_y_i = generate_sample(train_sample, one_hot_dict)
         train_x = np.array([train_x_i])
         train_y = np.array([train_y_i])
         train_loss = model_sequence.train_on_batch(train_x, train_y)
@@ -377,7 +384,7 @@ def train_and_test(train_lst, val_lst, test_lst, seed, model_name):
             for j in range(len(val_lst)):
                 pat = val_lst[j]
                 train_sample = series_data_grouped.get_group(pat)
-                train_x_i, train_y_i = generate_sample(train_sample)
+                train_x_i, train_y_i = generate_sample(train_sample, one_hot_dict)
                 train_x = np.array([train_x_i])
                 train_y = np.array([train_y_i])
                 val_mae = model_sequence.evaluate(train_x, train_y, verbose=0)
@@ -393,26 +400,29 @@ if __name__ == '__main__':
     processed_data = pd.merge(processed_appointment_data, processed_treatment_data,
                               on=['PatientSerNum', 'date'], how='inner')
 
-    processed_data = process_sequence_data(processed_data)
+    processed_seq_data = process_sequence_data(processed_data)
 
-    label_encoder_dxt_AliasName = one_hot_enc('dxt_AliasName', processed_data)
-    label_encoder_Sex = one_hot_enc('Sex', processed_data)
-    label_encoder_AliasSerNum = one_hot_enc('AliasSerNum', processed_data)
-    label_encoder_month = one_hot_enc('month', processed_data)
-    label_encoder_week = one_hot_enc('week', processed_data)
-    label_encoder_hour = one_hot_enc('hour', processed_data)
-    label_encoder_DoctorSerNum = one_hot_enc('DoctorSerNum', processed_data)
-    label_encoder_TreatmentOrientation = one_hot_enc('TreatmentOrientation', processed_data)
-    label_encoder_FractionNumber = one_hot_enc('FractionNumber', processed_data)
-    label_encoder_UserName = one_hot_enc('UserName', processed_data)
-    label_encoder_CourseId = one_hot_enc('CourseId', processed_data)
-    label_encoder_ResourceSerNum = one_hot_enc('ResourceSerNum', processed_data)
+    one_hot_dict = {
+        'label_encoder_dxt_AliasName': one_hot_enc('dxt_AliasName', processed_seq_data),
+        'label_encoder_Sex': one_hot_enc('Sex', processed_seq_data),
+        'label_encoder_AliasSerNum': one_hot_enc('AliasSerNum', processed_seq_data),
+        'label_encoder_month': one_hot_enc('month', processed_seq_data),
+        'label_encoder_week': one_hot_enc('week', processed_seq_data),
+        'label_encoder_hour': one_hot_enc('hour', processed_seq_data),
+        'label_encoder_DoctorSerNum': one_hot_enc('DoctorSerNum', processed_seq_data),
+        'label_encoder_TreatmentOrientation': one_hot_enc('TreatmentOrientation', processed_seq_data),
+        'label_encoder_FractionNumber': one_hot_enc('FractionNumber', processed_seq_data),
+        'label_encoder_UserName': one_hot_enc('UserName', processed_seq_data),
+        'label_encoder_CourseId': one_hot_enc('CourseId', processed_seq_data),
+        'label_encoder_ResourceSerNum': one_hot_enc('ResourceSerNum', processed_seq_data)
+    }
 
-    pat_lst, series_data_grouped = filter_data(processed_data)
+    pat_lst, series_data_grouped, _ = filter_data(processed_seq_data)
     train_lst, val_lst, test_lst = split_train_test(pat_lst)
 
     for seed in range(10):
-        train_and_test(train_lst, val_lst, test_lst, seed=seed, model_name=f'v1_sequence_model_{seed}.h5')
+        train_and_test(train_lst, val_lst, test_lst, one_hot_dict=one_hot_dict,
+                       seed=seed, model_name=f'v1_sequence_model_{seed}.h5')
 
 
 

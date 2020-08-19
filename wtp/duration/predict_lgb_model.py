@@ -18,21 +18,21 @@ from data_process import get_apptointment_info, get_treat_info
 from wtp.duration.config_duration import DT_MODEL_DIR, DT_FIG_DIR, DT_RES_DIR
 
 
-FEATURE_NUM = ['Scheduled_duration', 'Actual_duration',
-               'age',
-               'TreatmentTime', 'ImagesTaken',
-               'MU', 'MUCoeff']
+NUM_FEATURES = ['Scheduled_duration', 'Actual_duration',
+                'age',
+                'TreatmentTime', 'ImagesTaken',
+                'MU', 'MUCoeff']
 
 # RadiationId
-FEATURE_CATE = ['dxt_AliasName', 'AliasSerNum',
-                'Sex',
-                'month', 'week', 'hour',
-                'DoctorSerNum',
-                'TreatmentOrientation',
-                'FractionNumber',
-                'UserName',
-                'CourseId',
-                'ResourceSerNum']
+CATE_FEATURES = ['dxt_AliasName', 'AliasSerNum',
+                 'Sex',
+                 'month', 'week', 'hour',
+                 'DoctorSerNum',
+                 'TreatmentOrientation',
+                 'FractionNumber',
+                 'UserName',
+                 'CourseId',
+                 'ResourceSerNum']
 
 
 def select_feature(processed_appt_data, processed_treat_data):
@@ -97,7 +97,7 @@ def generate_xy(data, label='Actual_duration'):
 
 
 def lgb_reg_train(train_x, train_y, val_x, val_y, model_args=None, train_args=None):
-    logger.info('Start training!')
+    logger.info('Start training model!')
     default_model_args = {
         'num_leaves': 64, 'objective': 'mape', 'max_depth': -1,
         'learning_rate': 0.01, 'min_child_samples': 5, 'n_estimators': 100000,
